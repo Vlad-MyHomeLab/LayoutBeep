@@ -3,7 +3,7 @@
 /*
  * LayoutBeep - tiny native Win32 layout-change sound notifier.
  * No CRT, no .NET, no installer. Windows 10/11 x64.
- * v2.7.2: configurable RP2040 cues plus scheduled night mode. Night mode
+ * v2.7.3: configurable RP2040 cues plus scheduled night mode. Night mode
  *        reduces passive-piezo volume and LED/flash brightness during a
  *        user-defined local-time interval. Settings live next to the EXE
  *        in LayoutBeep.ini and are re-sent whenever the RP2040 reconnects.
