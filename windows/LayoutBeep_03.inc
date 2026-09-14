@@ -65,6 +65,7 @@ __declspec(dllimport) BOOL WINAPI DestroyWindow(HWND);
 __declspec(dllimport) HWND WINAPI GetForegroundWindow(void);
 __declspec(dllimport) DWORD WINAPI GetWindowThreadProcessId(HWND, LPDWORD);
 __declspec(dllimport) HANDLE WINAPI GetKeyboardLayout(DWORD);
+__declspec(dllimport) int WINAPI GetKeyboardLayoutList(int, HANDLE*);
 __declspec(dllimport) HANDLE WINAPI GetThreadDesktop(DWORD);
 __declspec(dllimport) BOOL WINAPI GetUserObjectInformationW(HANDLE, int, LPVOID, DWORD, LPDWORD);
 __declspec(dllimport) LRESULT WINAPI SendMessageW(HWND, UINT, WPARAM, LPARAM);
