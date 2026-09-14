@@ -12,29 +12,22 @@ static void open_board_settings(HWND owner) {
         return;
     }
 
-    /* English */
+    /* Legacy 2.7 settings window is retained only for source compatibility.
+       The tray menu opens the dynamic profile window from LayoutBeep_18.inc. */
     create_child(g_settingsHwnd, L"EDIT", L"", WS_BORDER | ES_NUMBER | ES_AUTOHSCROLL, 38, 145, 105, 30, IDC_ENG_HZ);
     create_child(g_settingsHwnd, L"EDIT", L"", WS_BORDER | ES_NUMBER | ES_AUTOHSCROLL, 197, 145, 105, 30, IDC_ENG_MS);
     create_child(g_settingsHwnd, L"BUTTON", L"", BS_OWNERDRAW, 356, 143, 220, 34, IDC_ENG_COLOR);
-
-    /* Russian */
     create_child(g_settingsHwnd, L"EDIT", L"", WS_BORDER | ES_NUMBER | ES_AUTOHSCROLL, 38, 267, 105, 30, IDC_RUS_HZ);
     create_child(g_settingsHwnd, L"EDIT", L"", WS_BORDER | ES_NUMBER | ES_AUTOHSCROLL, 197, 267, 105, 30, IDC_RUS_MS);
     create_child(g_settingsHwnd, L"BUTTON", L"", BS_OWNERDRAW, 356, 265, 220, 34, IDC_RUS_COLOR);
-
-    /* Flash */
     create_child(g_settingsHwnd, L"EDIT", L"", WS_BORDER | ES_NUMBER | ES_AUTOHSCROLL, 38, 389, 105, 30, IDC_FLASH_MS);
     create_child(g_settingsHwnd, L"BUTTON", L"", BS_OWNERDRAW, 197, 387, 260, 34, IDC_FLASH_COLOR);
-
-    /* Night schedule */
     create_child(g_settingsHwnd, L"BUTTON", L"", BS_OWNERDRAW, 458, 444, 118, 32, IDC_NIGHT_TOGGLE);
     create_child(g_settingsHwnd, L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 58, 510, 64, 30, IDC_NIGHT_FROM);
     create_child(g_settingsHwnd, L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL, 158, 510, 64, 30, IDC_NIGHT_TO);
     create_child(g_settingsHwnd, L"EDIT", L"", WS_BORDER | ES_NUMBER | ES_AUTOHSCROLL, 238, 510, 78, 30, IDC_DAY_VOLUME);
     create_child(g_settingsHwnd, L"EDIT", L"", WS_BORDER | ES_NUMBER | ES_AUTOHSCROLL, 370, 510, 78, 30, IDC_NIGHT_VOLUME);
     create_child(g_settingsHwnd, L"EDIT", L"", WS_BORDER | ES_NUMBER | ES_AUTOHSCROLL, 38, 566, 78, 30, IDC_NIGHT_BRIGHT);
-
-    /* Actions */
     create_child(g_settingsHwnd, L"BUTTON", L"По умолчанию", BS_OWNERDRAW, 24, 638, 132, 36, IDC_DEFAULTS);
     create_child(g_settingsHwnd, L"BUTTON", L"Отмена", BS_OWNERDRAW, 382, 638, 96, 36, IDC_CANCEL);
     create_child(g_settingsHwnd, L"BUTTON", L"Сохранить", BS_OWNERDRAW, 488, 638, 116, 36, IDC_SAVE);
@@ -78,7 +71,6 @@ static BOOL choose_wav(HWND owner, BOOL english) {
     return TRUE;
 }
 
-
 static void append_uint_dec(LPWSTR dst, UINT cap, DWORD v) {
     WCHAR tmp[16];
     UINT n = 0, i;
@@ -89,10 +81,9 @@ static void append_uint_dec(LPWSTR dst, UINT cap, DWORD v) {
     }
 }
 
-
 static void show_about(HWND owner) {
     LPWSTR text = g_aboutText;
     text[0] = 0;
-    wcat(text, ARRAYSIZE(g_aboutText), L"LayoutBeep 2.7.3 + RP2040-Zero\n\n");
-    wcat(text, ARRAYSIZE(g_aboutText), L"Источник раскладки: системный Input Indicator Windows.\n");
-    wcat(text, ARRAYSIZE(g_aboutText), L"Новое состояние подтверждается двумя последовательными чтениями.\n\n");
+    wcat(text, ARRAYSIZE(g_aboutText), L"LayoutBeep 2.8.0 + RP2040-Zero\n\n");
+    wcat(text, ARRAYSIZE(g_aboutText), L"Раскладки: список Windows (GetKeyboardLayoutList), до 6 профилей.\n");
+    wcat(text, ARRAYSIZE(g_aboutText), L"Текущее состояние: HKL активного окна, подтверждение двумя чтениями.\n\n");
