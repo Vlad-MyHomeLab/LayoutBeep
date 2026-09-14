@@ -8,23 +8,22 @@
         }
         break;
     case CMD_ENGLISH_WAV:
-        choose_wav(owner, TRUE);
+        choose_profile_wav(owner);
         break;
     case CMD_RUSSIAN_WAV:
-        choose_wav(owner, FALSE);
+        choose_profile_wav(owner);
         break;
     case CMD_BOARD_SETTINGS:
-        open_board_settings(owner);
+        open_profiles_settings(owner);
         break;
     case CMD_TEST_ENGLISH:
-        if (!g_boardConnected) board_try_connect();
-        if (!board_send_test(LANG_ENGLISH) && g_pcFallbackEnabled) play_language_sound(TRUE);
-        update_tray_tooltip();
-        break;
     case CMD_TEST_RUSSIAN:
-        if (!g_boardConnected) board_try_connect();
-        if (!board_send_test(LANG_RUSSIAN) && g_pcFallbackEnabled) play_language_sound(FALSE);
-        update_tray_tooltip();
+        if (g_activeProfileIndex != INVALID_PROFILE_INDEX) {
+            if (!g_boardConnected) board_try_connect();
+            if (!board_send_profile_test(g_activeProfileIndex) && g_pcFallbackEnabled)
+                play_profile_sound(g_activeProfileIndex);
+            update_tray_tooltip();
+        }
         break;
     case CMD_BOARD_RECONNECT:
         board_close();
@@ -32,14 +31,7 @@
         update_tray_tooltip();
         break;
     case CMD_RESET_SOUNDS:
-        {
-            BOOL ok = TRUE;
-            if (g_englishWav[0] && !patch_ini_key(L"Sounds", L"EnglishWav", L"")) ok = FALSE;
-            if (g_russianWav[0] && !patch_ini_key(L"Sounds", L"RussianWav", L"")) ok = FALSE;
-            if (ok) { g_englishWav[0] = 0; g_russianWav[0] = 0; }
-            else MessageBoxW(owner, L"Не удалось точечно сбросить WAV-пути в LayoutBeep.ini.",
-                             L"LayoutBeep — ошибка записи INI", MB_OK | MB_ICONERROR);
-        }
+        reset_profile_wav(owner);
         break;
     case CMD_LOCKSCREEN:
         if (secure_support_installed()) {
@@ -89,32 +81,28 @@ static LRESULT CALLBACK window_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
                 g_desktopActive = activeNow;
                 if (!g_desktopActive) board_close();
                 else {
-                    g_secureLastPrimary = 0;
-                    g_secureCandidatePrimary = 0;
-                    g_secureCandidateCount = 0;
-                    check_secure_layout(FALSE);
+                    g_secureLastLayoutId = 0;
+                    g_secureLayoutCandidateId = 0;
+                    g_secureLayoutCandidateCount = 0;
+                    check_current_layout(FALSE, TRUE);
                     board_try_connect();
                 }
             }
             if (g_desktopActive) {
-                check_secure_layout(TRUE);
+                check_current_layout(TRUE, TRUE);
                 board_service();
             }
             return 0;
         }
 
-        /* Normal desktop. Hand USB to the secure helper only after Ease of Access
-           registration/notification succeeded. If the helper never appears, resume
-           heartbeat from the inactive desktop after about one second so the RP2040
-           keeps the last valid colour instead of going orange/offline. */
         if (activeNow != g_desktopActive) {
             g_desktopActive = activeNow;
             g_lockHandoffTicks = 0;
             if (g_desktopActive) {
                 g_trayIndicatorButton = NULL;
-                g_lastTrayPrimary = 0;
-                g_trayCandidatePrimary = 0;
-                g_trayCandidateCount = 0;
+                g_lastLayoutId = 0;
+                g_layoutCandidateId = 0;
+                g_layoutCandidateCount = 0;
                 check_tray_indicator(FALSE);
                 board_try_connect();
             } else if (g_lockSupportReady && secure_support_installed()) {
