@@ -18,24 +18,7 @@ static void acat_value(char *dst, UINT cap, DWORD v, BOOL comma) {
 }
 
 static BOOL board_send_config(void) {
-    char msg[160];
-    msg[0] = 'C'; msg[1] = 0;
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.engHz, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.engMs, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.engR, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.engG, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.engB, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.rusHz, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.rusMs, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.rusR, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.rusG, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.rusB, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.flashMs, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.flashR, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.flashG, TRUE);
-    acat_value(msg, ARRAYSIZE(msg), g_boardCfg.flashB, TRUE);
-    acat_char(msg, ARRAYSIZE(msg), '\n');
-    return board_write_ascii(msg);
+    return board_send_profiles();
 }
 
 static BOOL board_send_night_mode(void) {
@@ -58,6 +41,7 @@ static void service_night_schedule(BOOL forceSend) {
     }
 }
 
+/* Legacy helpers are kept for compatibility with LB5 firmware and old code paths. */
 static BOOL board_send_layout(WORD primary, BOOL switched) {
     char msg[4];
     if (primary != LANG_ENGLISH && primary != LANG_RUSSIAN) return FALSE;
@@ -85,6 +69,7 @@ static BOOL board_try_port(LPCWSTR port) {
     DWORD written = 0, got = 0, total = 0, attempt;
     BYTE reply[160];
     static const char hello[] = "?\n";
+    BOOL isLb6, isLb5;
 
     if (!port || !port[0]) return FALSE;
     path[0] = 0;
@@ -106,9 +91,6 @@ static BOOL board_try_port(LPCWSTR port) {
         CloseHandle(h);
         return FALSE;
     }
-    /* USB CDC may split a short text reply into more than one packet.
-       Accumulate several bounded reads instead of requiring one ReadFile()
-       to contain the complete handshake line. */
     lb_memset(reply, 0, sizeof(reply));
     for (attempt = 0; attempt < 5u && total + 1u < (DWORD)sizeof(reply); ++attempt) {
         got = 0;
@@ -118,19 +100,24 @@ static BOOL board_try_port(LPCWSTR port) {
         }
         total += got;
         reply[total] = 0;
-        if ((bytes_contains(reply, total, "LB2") || bytes_contains(reply, total, "LB3") || bytes_contains(reply, total, "LB4") || bytes_contains(reply, total, "LB5")) && bytes_contains(reply, total, "RP2040-ZERO")) break;
+        if ((bytes_contains(reply, total, "LB5") || bytes_contains(reply, total, "LB6")) &&
+            bytes_contains(reply, total, "RP2040-ZERO")) break;
     }
-    if ((!bytes_contains(reply, total, "LB2") && !bytes_contains(reply, total, "LB3") && !bytes_contains(reply, total, "LB4") && !bytes_contains(reply, total, "LB5")) || !bytes_contains(reply, total, "RP2040-ZERO")) {
+    isLb6 = bytes_contains(reply, total, "LB6");
+    isLb5 = bytes_contains(reply, total, "LB5");
+    if ((!isLb6 && !isLb5) || !bytes_contains(reply, total, "RP2040-ZERO")) {
         CloseHandle(h);
         return FALSE;
     }
 
     g_boardHandle = h;
     g_boardConnected = TRUE;
+    g_boardProtocol = isLb6 ? 6u : 5u;
     wcopy(g_boardPort, ARRAYSIZE(g_boardPort), port);
     board_send_config();
     board_send_night_mode();
-    if (g_lastPrimary) board_send_layout(g_lastPrimary, FALSE);
+    if (g_activeProfileIndex != INVALID_PROFILE_INDEX)
+        board_send_profile_index(g_activeProfileIndex, FALSE);
     return TRUE;
 }
 
@@ -158,8 +145,6 @@ static BOOL board_try_connect(void) {
         type = 0; needed = 0;
         if (!SetupDiGetDeviceRegistryPropertyW(set, &dev, SPDRP_HARDWAREID, &type,
                                                (LPBYTE)hwid, sizeof(hwid), &needed)) continue;
-        /* The Arduino-Pico Waveshare board uses Raspberry Pi's VID 2E8A.
-           Handshake below is the final identity check, so other Pico boards are safe. */
         if (wfind_ascii_ci(hwid, L"VID_2E8A") == 0xffffffffu) continue;
 
         key = SetupDiOpenDevRegKey(set, &dev, DICS_FLAG_GLOBAL, 0u, DIREG_DEV, KEY_QUERY_VALUE);

@@ -22,6 +22,13 @@
     wc.lpszClassName = L"LayoutBeepSettingsWindow";
     RegisterClassW(&wc);
 
+    lb_memset(&wc, 0, sizeof(wc));
+    wc.lpfnWndProc = profiles_settings_proc;
+    wc.hInstance = inst;
+    wc.hIcon = g_icon;
+    wc.lpszClassName = L"LayoutBeepProfilesSettingsWindow";
+    RegisterClassW(&wc);
+
     g_taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
     g_hwnd = CreateWindowExW(0, L"LayoutBeepHiddenWindow", L"LayoutBeep", 0,
                              0, 0, 0, 0, NULL, NULL, inst, NULL);
@@ -33,12 +40,9 @@
     { HRESULT chr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED); g_comInitialized = SUCCEEDED(chr); }
     g_desktopActive = current_desktop_is_input();
     if (g_secureMode) {
-        /* Runtime/secure diagnostics must never modify the user's INI file. */
-        check_secure_layout(FALSE);
+        check_current_layout(FALSE, TRUE);
         if (g_desktopActive) board_try_connect();
     } else {
-        /* Clean the v2.4 Configuration entry. For TerminateOnDesktopSwitch=0 Microsoft
-           requires an externally-started AT to notify Ease of Access Center explicitly. */
         remove_at_configuration_item(AT_OLD_KEY_NAME);
         remove_at_configuration_item(AT_KEY_NAME);
         check_tray_indicator(FALSE);
