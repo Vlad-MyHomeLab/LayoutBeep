@@ -21,14 +21,12 @@
     {
         UINT i;
         for (i = 0; i < g_profileCount; ++i) {
-            WCHAR idText[16];
             wcat(text, ARRAYSIZE(g_aboutText), L"\n  ");
             append_uint_dec(text, ARRAYSIZE(g_aboutText), i + 1u);
             wcat(text, ARRAYSIZE(g_aboutText), L". ");
             wcat(text, ARRAYSIZE(g_aboutText), g_profiles[i].name);
-            format_layout_id(g_profiles[i].id, idText, ARRAYSIZE(idText));
             wcat(text, ARRAYSIZE(g_aboutText), L" [");
-            wcat(text, ARRAYSIZE(g_aboutText), idText);
+            wcat(text, ARRAYSIZE(g_aboutText), g_profiles[i].section);
             wcat(text, ARRAYSIZE(g_aboutText), L"] — ");
             append_uint_dec(text, ARRAYSIZE(g_aboutText), g_profiles[i].hz);
             wcat(text, ARRAYSIZE(g_aboutText), L" Гц / ");
