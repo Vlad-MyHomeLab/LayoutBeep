@@ -40,16 +40,17 @@ static HWND find_input_indicator_button(void) {
         button = FindWindowExW(indicator, NULL, L"Button", NULL);
         if (button) return button;
     }
-    /* Some Windows 10 builds expose it as a sibling inside TrayNotifyWnd. */
     button = FindWindowExW(notify, NULL, L"InputIndicatorButton", NULL);
     return button;
 }
 
-static void set_tip_text(NOTIFYICONDATAW *nid, WORD primary) {
-    LPCWSTR label = L"LayoutBeep";
-    if (primary == LANG_ENGLISH) label = L"LayoutBeep - ENG";
-    else if (primary == LANG_RUSSIAN) label = L"LayoutBeep - РУС";
-    wcopy(nid->szTip, ARRAYSIZE(nid->szTip), label);
+static void set_tip_text(NOTIFYICONDATAW *nid, DWORD layoutId) {
+    int idx = layoutId ? find_profile_by_id(layoutId) : -1;
+    wcopy(nid->szTip, ARRAYSIZE(nid->szTip), L"LayoutBeep");
+    if (idx >= 0) {
+        wcat(nid->szTip, ARRAYSIZE(nid->szTip), L" - ");
+        wcat(nid->szTip, ARRAYSIZE(nid->szTip), g_profiles[(UINT)idx].name);
+    }
     wcat(nid->szTip, ARRAYSIZE(nid->szTip), g_boardConnected ? L" | RP2040: " : L" | RP2040: offline");
     if (g_boardConnected) wcat(nid->szTip, ARRAYSIZE(nid->szTip), g_boardPort);
     if (g_boardCfg.nightEnabled) wcat(nid->szTip, ARRAYSIZE(nid->szTip), g_nightActive ? L" | ночь" : L" | день");
@@ -62,7 +63,7 @@ static void update_tray_tooltip(void) {
     nid.hWnd = g_hwnd;
     nid.uID = 1;
     nid.uFlags = NIF_TIP;
-    set_tip_text(&nid, g_lastPrimary);
+    set_tip_text(&nid, g_lastLayoutId);
     Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
@@ -75,7 +76,7 @@ static void add_tray_icon(void) {
     nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     nid.uCallbackMessage = WM_TRAY;
     nid.hIcon = g_icon;
-    set_tip_text(&nid, g_lastPrimary);
+    set_tip_text(&nid, g_lastLayoutId);
     Shell_NotifyIconW(NIM_ADD, &nid);
 }
 
