@@ -3,10 +3,9 @@
 /*
  * LayoutBeep - tiny native Win32 layout-change sound notifier.
  * No CRT, no .NET, no installer. Windows 10/11 x64.
- * v2.7.3: configurable RP2040 cues plus scheduled night mode. Night mode
- *        reduces passive-piezo volume and LED/flash brightness during a
- *        user-defined local-time interval. Settings live next to the EXE
- *        in LayoutBeep.ini and are re-sent whenever the RP2040 reconnects.
+ * v2.8.0: profiles are discovered from Windows keyboard layouts instead of
+ *        assuming English/Russian. Up to six system layouts get independent
+ *        tone/color settings and are sent to RP2040 as generic profiles.
  */
 
 typedef unsigned char BYTE;
@@ -73,10 +72,12 @@ typedef LRESULT (__stdcall *WNDPROC)(HWND, UINT, WPARAM, LPARAM);
 #define WS_CHILD         0x40000000u
 #define WS_VISIBLE       0x10000000u
 #define WS_BORDER        0x00800000u
+#define WS_VSCROLL       0x00200000u
 #define BS_GROUPBOX      0x00000007u
 #define BS_OWNERDRAW     0x0000000Bu
 #define ES_NUMBER        0x00002000u
 #define ES_AUTOHSCROLL   0x00000080u
+#define CBS_DROPDOWNLIST 0x00000003u
 #define SW_SHOWNORMAL    1
 #define SW_SHOW          5
 #define TRANSPARENT      1
@@ -93,7 +94,15 @@ typedef LRESULT (__stdcall *WNDPROC)(HWND, UINT, WPARAM, LPARAM);
 #define GET_G_VALUE(rgb) ((BYTE)(((rgb) >> 8) & 0xffu))
 #define GET_B_VALUE(rgb) ((BYTE)(((rgb) >> 16) & 0xffu))
 #define LOWORD_(v) ((WORD)((ULONG_PTR)(v) & 0xffffu))
+#define HIWORD_(v) ((WORD)(((ULONG_PTR)(v) >> 16) & 0xffffu))
 #define WM_TRAY          (WM_APP + 1u)
+
+#define CB_ADDSTRING    0x0143u
+#define CB_GETCURSEL    0x0147u
+#define CB_RESETCONTENT 0x014Bu
+#define CB_SETCURSEL    0x014Eu
+#define CB_ERR          ((LRESULT)-1)
+#define CBN_SELCHANGE   1u
 
 #define NIM_ADD    0x00000000u
 #define NIM_MODIFY 0x00000001u
@@ -198,6 +207,12 @@ typedef LRESULT (__stdcall *WNDPROC)(HWND, UINT, WPARAM, LPARAM);
 #define IDC_NIGHT_BRIGHT 2016u
 #define IDC_DAY_VOLUME   2017u
 
+#define IDC_PROFILE_COMBO   2101u
+#define IDC_PROFILE_HZ      2102u
+#define IDC_PROFILE_MS      2103u
+#define IDC_PROFILE_COLOR   2104u
+#define IDC_PROFILE_DEFAULT 2105u
+
 #define ARRAYSIZE(a) ((UINT)(sizeof(a)/sizeof((a)[0])))
 #define UOI_NAME 2
 #define UOI_IO 6
@@ -214,4 +229,3 @@ typedef LRESULT (__stdcall *WNDPROC)(HWND, UINT, WPARAM, LPARAM);
 #define INPUT_KEYBOARD 1u
 #define KEYEVENTF_KEYUP 0x0002u
 #define VK_LWIN 0x5Bu
-
