@@ -5,23 +5,13 @@
     wcat(g_configPath, ARRAYSIZE(g_configPath), L"\\LayoutBeep.ini");
     build_auto_command();
     configWasMissing = (GetFileAttributesW(g_configPath) == INVALID_FILE_ATTRIBUTES);
-    /* If the INI is absent, create a COMPLETE default configuration.
-       This is the only startup-time write. An existing file is never regenerated:
-       all later persistence uses surgical key patches only. */
+
+    /* A missing INI is created once. Its profile sections are generated from the
+       keyboard layouts actually installed in Windows. Existing INI files are never
+       regenerated; missing per-layout settings live only in memory until the user
+       explicitly changes them. */
     if (configWasMissing) {
         if (!patch_ini_key(L"General", L"PcFallbackEnabled", L"0") ||
-            !patch_ini_key(L"Sounds", L"EnglishWav", L"") ||
-            !patch_ini_key(L"Sounds", L"RussianWav", L"") ||
-            !patch_ini_key(L"Board", L"EnglishHz", L"1450") ||
-            !patch_ini_key(L"Board", L"EnglishMs", L"75") ||
-            !patch_ini_key(L"Board", L"EnglishR", L"0") ||
-            !patch_ini_key(L"Board", L"EnglishG", L"0") ||
-            !patch_ini_key(L"Board", L"EnglishB", L"28") ||
-            !patch_ini_key(L"Board", L"RussianHz", L"850") ||
-            !patch_ini_key(L"Board", L"RussianMs", L"75") ||
-            !patch_ini_key(L"Board", L"RussianR", L"28") ||
-            !patch_ini_key(L"Board", L"RussianG", L"0") ||
-            !patch_ini_key(L"Board", L"RussianB", L"0") ||
             !patch_ini_key(L"Board", L"FlashMs", L"80") ||
             !patch_ini_key(L"Board", L"FlashR", L"90") ||
             !patch_ini_key(L"Board", L"FlashG", L"90") ||
@@ -36,6 +26,9 @@
 
     GetPrivateProfileStringW(L"General", L"PcFallbackEnabled", L"0", tmp, ARRAYSIZE(tmp), g_configPath);
     g_pcFallbackEnabled = !weq(tmp, L"0");
+
+    /* Legacy 2.7 keys are read only as fallback for an upgrade. They are never
+       created or rewritten by 2.8.0. */
     GetPrivateProfileStringW(L"Sounds", L"EnglishWav", L"", g_englishWav, ARRAYSIZE(g_englishWav), g_configPath);
     GetPrivateProfileStringW(L"Sounds", L"RussianWav", L"", g_russianWav, ARRAYSIZE(g_russianWav), g_configPath);
 
@@ -50,6 +43,7 @@
     g_boardCfg.rusR = (BYTE)ini_uint(L"Board", L"RussianR", g_boardCfg.rusR, 0u, 255u);
     g_boardCfg.rusG = (BYTE)ini_uint(L"Board", L"RussianG", g_boardCfg.rusG, 0u, 255u);
     g_boardCfg.rusB = (BYTE)ini_uint(L"Board", L"RussianB", g_boardCfg.rusB, 0u, 255u);
+
     g_boardCfg.flashMs = ini_uint(L"Board", L"FlashMs", g_boardCfg.flashMs, 10u, 2000u);
     g_boardCfg.flashR = (BYTE)ini_uint(L"Board", L"FlashR", g_boardCfg.flashR, 0u, 255u);
     g_boardCfg.flashG = (BYTE)ini_uint(L"Board", L"FlashG", g_boardCfg.flashG, 0u, 255u);
@@ -63,17 +57,19 @@
     g_boardCfg.nightBrightnessPct = ini_uint(L"Night", L"Brightness", g_boardCfg.nightBrightnessPct, 0u, 100u);
     g_nightActive = compute_night_active();
 
+    if (!refresh_layout_profiles(configWasMissing)) return FALSE;
+
     if (configWasMissing) {
-        /* First run: the complete default INI has just been created above. */
         set_autostart(TRUE);
     } else {
         if (get_autostart(g_regValue, ARRAYSIZE(g_regValue)) && !weq(g_regValue, g_autoCommand)) {
-            set_autostart(TRUE); /* EXE was moved: follow the new location. */
+            set_autostart(TRUE);
         }
     }
     return TRUE;
 }
 
+/* Legacy fallback for old call sites. Generic 2.8 paths use play_profile_sound(). */
 static void play_language_sound(BOOL english) {
     LPCWSTR path = english ? g_englishWav : g_russianWav;
     if (path[0] && PlaySoundW(path, NULL, SND_FILENAME | SND_ASYNC | SND_NODEFAULT)) return;
@@ -102,85 +98,9 @@ static void accept_language_primary(WORD primary, BOOL play, DWORD source) {
     update_tray_tooltip();
 }
 
-
 static void check_tray_indicator(BOOL play) {
-    static const GUID IID_IAccessible = {0x618736e0u,0x3c3du,0x11cfu,{0x81u,0x0cu,0x00u,0xaau,0x00u,0x38u,0x9bu,0x71u}};
-    LPVOID acc = NULL;
-    WCHAR text[256];
-    WORD primary = 0;
-    HRESULT hr;
-
-    if (!g_trayIndicatorButton || !IsWindow(g_trayIndicatorButton))
-        g_trayIndicatorButton = find_input_indicator_button();
-    if (!g_trayIndicatorButton) {
-        g_trayReadFailures++;
-        g_trayCandidatePrimary = 0;
-        g_trayCandidateCount = 0;
-        return;
-    }
-
-    hr = AccessibleObjectFromWindow(g_trayIndicatorButton, (DWORD)OBJID_CLIENT, &IID_IAccessible, &acc);
-    if (!SUCCEEDED(hr) || !acc) {
-        g_trayReadFailures++;
-        g_trayCandidatePrimary = 0;
-        g_trayCandidateCount = 0;
-        return;
-    }
-
-    text[0] = 0;
-    if (accessible_string(acc, 10u, text, ARRAYSIZE(text))) primary = primary_from_indicator_text(text);
-    if (!primary) {
-        WCHAR value[256]; value[0] = 0;
-        if (accessible_string(acc, 11u, value, ARRAYSIZE(value))) {
-            if (!text[0]) wcopy(text, ARRAYSIZE(text), value);
-            primary = primary_from_indicator_text(value);
-        }
-    }
-    release_accessible(acc);
-
-    if (text[0]) wcopy(g_lastTrayText, ARRAYSIZE(g_lastTrayText), text);
-    if (!primary) {
-        g_trayReadFailures++;
-        g_trayCandidatePrimary = 0;
-        g_trayCandidateCount = 0;
-        return;
-    }
-
-    /* First valid reading establishes the baseline silently. */
-    if (!g_lastTrayPrimary) {
-        g_lastTrayPrimary = primary;
-        g_trayCandidatePrimary = 0;
-        g_trayCandidateCount = 0;
-        accept_language_primary(primary, FALSE, 0u);
-        return;
-    }
-
-    /* Same as the already-confirmed tray state: there is no change. */
-    if (primary == g_lastTrayPrimary) {
-        g_trayCandidatePrimary = 0;
-        g_trayCandidateCount = 0;
-        return;
-    }
-
-    /* A different tray state must be observed twice in a row. This filters
-       short-lived/stale Accessibility values and, most importantly, makes all
-       keyboard/shell hook timing irrelevant to the sound decision. */
-    if (primary != g_trayCandidatePrimary) {
-        g_trayCandidatePrimary = primary;
-        g_trayCandidateCount = 1u;
-        return;
-    }
-
-    if (g_trayCandidateCount < 0xffffffffu) g_trayCandidateCount++;
-    if (g_trayCandidateCount < 2u) return;
-
-    g_lastTrayPrimary = primary;
-    g_trayCandidatePrimary = 0;
-    g_trayCandidateCount = 0;
-    g_trayChanges++;
-    accept_language_primary(primary, play, 4u);
+    check_current_layout(play, FALSE);
 }
-
 
 static HWND create_child(HWND parent, LPCWSTR cls, LPCWSTR text, DWORD style,
                          int x, int y, int w, int h, UINT id) {
