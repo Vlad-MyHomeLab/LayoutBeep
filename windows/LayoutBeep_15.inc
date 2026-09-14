@@ -2,6 +2,8 @@
     if (g_boardConnected) {
         wcat(text, ARRAYSIZE(g_aboutText), L"ПОДКЛЮЧЕНА, ");
         wcat(text, ARRAYSIZE(g_aboutText), g_boardPort);
+        wcat(text, ARRAYSIZE(g_aboutText), L", протокол LB");
+        append_uint_dec(text, ARRAYSIZE(g_aboutText), g_boardProtocol);
     } else {
         wcat(text, ARRAYSIZE(g_aboutText), L"не найдена");
     }
@@ -9,8 +11,33 @@
     append_uint_dec(text, ARRAYSIZE(g_aboutText), g_boardConnectAttempts);
     wcat(text, ARRAYSIZE(g_aboutText), L"\nОшибок передачи USB: ");
     append_uint_dec(text, ARRAYSIZE(g_aboutText), g_boardTxErrors);
-    wcat(text, ARRAYSIZE(g_aboutText), L"\nEnglish: "); append_uint_dec(text, ARRAYSIZE(g_aboutText), g_boardCfg.engHz); wcat(text, ARRAYSIZE(g_aboutText), L" Гц / "); append_uint_dec(text, ARRAYSIZE(g_aboutText), g_boardCfg.engMs); wcat(text, ARRAYSIZE(g_aboutText), L" мс");
-    wcat(text, ARRAYSIZE(g_aboutText), L"\nРусский: "); append_uint_dec(text, ARRAYSIZE(g_aboutText), g_boardCfg.rusHz); wcat(text, ARRAYSIZE(g_aboutText), L" Гц / "); append_uint_dec(text, ARRAYSIZE(g_aboutText), g_boardCfg.rusMs); wcat(text, ARRAYSIZE(g_aboutText), L" мс");
+    wcat(text, ARRAYSIZE(g_aboutText), L"\nРаскладок Windows: ");
+    append_uint_dec(text, ARRAYSIZE(g_aboutText), g_systemLayoutCount);
+    wcat(text, ARRAYSIZE(g_aboutText), L", профилей LayoutBeep: ");
+    append_uint_dec(text, ARRAYSIZE(g_aboutText), g_profileCount);
+    if (g_systemLayoutCount > MAX_LAYOUT_PROFILES)
+        wcat(text, ARRAYSIZE(g_aboutText), L" (используются первые 6)");
+
+    {
+        UINT i;
+        for (i = 0; i < g_profileCount; ++i) {
+            WCHAR idText[16];
+            wcat(text, ARRAYSIZE(g_aboutText), L"\n  ");
+            append_uint_dec(text, ARRAYSIZE(g_aboutText), i + 1u);
+            wcat(text, ARRAYSIZE(g_aboutText), L". ");
+            wcat(text, ARRAYSIZE(g_aboutText), g_profiles[i].name);
+            format_layout_id(g_profiles[i].id, idText, ARRAYSIZE(idText));
+            wcat(text, ARRAYSIZE(g_aboutText), L" [");
+            wcat(text, ARRAYSIZE(g_aboutText), idText);
+            wcat(text, ARRAYSIZE(g_aboutText), L"] — ");
+            append_uint_dec(text, ARRAYSIZE(g_aboutText), g_profiles[i].hz);
+            wcat(text, ARRAYSIZE(g_aboutText), L" Гц / ");
+            append_uint_dec(text, ARRAYSIZE(g_aboutText), g_profiles[i].ms);
+            wcat(text, ARRAYSIZE(g_aboutText), L" мс");
+            if (i == g_activeProfileIndex) wcat(text, ARRAYSIZE(g_aboutText), L"  ← текущая");
+        }
+    }
+
     wcat(text, ARRAYSIZE(g_aboutText), L"\nНочной режим: ");
     if (!g_boardCfg.nightEnabled) wcat(text, ARRAYSIZE(g_aboutText), L"выключен");
     else {
@@ -40,7 +67,7 @@
         wcat(text, ARRAYSIZE(g_aboutText), L"\nAccessibility-текст: ");
         wcat(text, ARRAYSIZE(g_aboutText), g_lastTrayText);
     }
-    wcat(text, ARRAYSIZE(g_aboutText), L"\nПодтверждённых изменений индикатора: ");
+    wcat(text, ARRAYSIZE(g_aboutText), L"\nПодтверждённых изменений раскладки: ");
     append_uint_dec(text, ARRAYSIZE(g_aboutText), g_trayChanges);
     wcat(text, ARRAYSIZE(g_aboutText), L"\nОшибок/пустых чтений индикатора: ");
     append_uint_dec(text, ARRAYSIZE(g_aboutText), g_trayReadFailures);
@@ -58,20 +85,27 @@ static void show_menu(HWND owner) {
     BOOL autoEnabled;
     if (!menu) return;
 
-    { WCHAR status[96]; status[0] = 0;
+    { WCHAR status[128]; status[0] = 0;
       if (g_boardConnected) { wcat(status, ARRAYSIZE(status), L"RP2040: "); wcat(status, ARRAYSIZE(status), g_boardPort); wcat(status, ARRAYSIZE(status), L" — подключена"); }
       else wcat(status, ARRAYSIZE(status), L"RP2040: не найдена");
       append_menu(menu, MF_STRING | MF_GRAYED, 0, status); }
+
+    { WCHAR current[160]; current[0] = 0;
+      wcat(current, ARRAYSIZE(current), L"Раскладка: ");
+      if (g_activeProfileIndex < g_profileCount) wcat(current, ARRAYSIZE(current), g_profiles[g_activeProfileIndex].name);
+      else wcat(current, ARRAYSIZE(current), L"не определена");
+      append_menu(menu, MF_STRING | MF_GRAYED, 0, current); }
+
     append_menu(menu, MF_STRING, CMD_BOARD_RECONNECT, L"Переподключить RP2040");
-    append_menu(menu, MF_STRING, CMD_BOARD_SETTINGS, L"Настройки RP2040...");
-    append_menu(menu, MF_STRING, CMD_TEST_ENGLISH, L"Тест платы: English");
-    append_menu(menu, MF_STRING, CMD_TEST_RUSSIAN, L"Тест платы: Русский");
+    append_menu(menu, MF_STRING, CMD_BOARD_SETTINGS, L"Настройки раскладок...");
+    append_menu(menu, MF_STRING | (g_activeProfileIndex < g_profileCount ? 0 : MF_GRAYED),
+                CMD_TEST_ENGLISH, L"Тест текущей раскладки");
     append_menu(menu, MF_SEPARATOR, 0, NULL);
     append_menu(menu, MF_STRING | (g_pcFallbackEnabled ? MF_CHECKED : 0), CMD_SOUNDS_ENABLED, L"Резервный звук на ПК");
-    append_menu(menu, MF_SEPARATOR, 0, NULL);
-    append_menu(menu, MF_STRING, CMD_ENGLISH_WAV, L"Звук English (WAV)...");
-    append_menu(menu, MF_STRING, CMD_RUSSIAN_WAV, L"Звук Русский (WAV)...");
-    append_menu(menu, MF_STRING, CMD_RESET_SOUNDS, L"Сбросить на встроенные звуки");
+    append_menu(menu, MF_STRING | (g_activeProfileIndex < g_profileCount ? 0 : MF_GRAYED),
+                CMD_ENGLISH_WAV, L"WAV текущей раскладки...");
+    append_menu(menu, MF_STRING | (g_activeProfileIndex < g_profileCount ? 0 : MF_GRAYED),
+                CMD_RESET_SOUNDS, L"Сбросить WAV текущей раскладки");
     append_menu(menu, MF_SEPARATOR, 0, NULL);
 
     { BOOL lockInstalled = secure_support_installed();
