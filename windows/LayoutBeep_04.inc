@@ -19,6 +19,19 @@ typedef struct {
     DWORD nightBrightnessPct;
 } BOARD_CONFIG;
 
+#define MAX_LAYOUT_PROFILES 6u
+#define INVALID_PROFILE_INDEX 0xffffffffu
+
+typedef struct {
+    DWORD id;
+    HANDLE hkl;
+    WCHAR section[32];
+    WCHAR name[96];
+    DWORD hz;
+    DWORD ms;
+    BYTE r, g, b;
+} LAYOUT_PROFILE;
+
 static HWND g_hwnd;
 static HWND g_settingsHwnd;
 static HINSTANCE g_instance;
@@ -61,10 +74,25 @@ static DWORD g_boardTxErrors;
 static DWORD g_boardTick;
 static DWORD g_nightTick;
 static BOOL g_nightActive;
-static WCHAR g_aboutText[2048];
+static WCHAR g_aboutText[4096];
 static BOARD_CONFIG g_boardCfg;
 static BOARD_CONFIG g_editCfg;
 static COLORREF g_customColors[16];
+
+static LAYOUT_PROFILE g_profiles[MAX_LAYOUT_PROFILES];
+static LAYOUT_PROFILE g_editProfiles[MAX_LAYOUT_PROFILES];
+static WCHAR g_profileWav[MAX_LAYOUT_PROFILES][32768];
+static UINT g_profileCount;
+static UINT g_systemLayoutCount;
+static UINT g_activeProfileIndex = INVALID_PROFILE_INDEX;
+static UINT g_editProfileIndex;
+static DWORD g_lastLayoutId;
+static DWORD g_layoutCandidateId;
+static UINT g_layoutCandidateCount;
+static DWORD g_secureLastLayoutId;
+static DWORD g_secureLayoutCandidateId;
+static UINT g_secureLayoutCandidateCount;
+static DWORD g_boardProtocol;
 
 /* INI writes are deliberately surgical. Existing files are never regenerated,
    normalized or replaced. Only the byte range belonging to a user-changed key
@@ -86,6 +114,18 @@ static WCHAR wlower_ascii(WCHAR c);
 static UINT wfind_ascii_ci(LPCWSTR text, LPCWSTR needle);
 static void accept_language_primary(WORD primary, BOOL play, DWORD source);
 static void board_close(void);
+
+static BOOL refresh_layout_profiles(BOOL createMissingSections);
+static void check_current_layout(BOOL play, BOOL secureDesktop);
+static int find_profile_by_id(DWORD id);
+static BOOL board_send_profiles(void);
+static BOOL board_send_profile_index(UINT index, BOOL switched);
+static BOOL board_send_profile_test(UINT index);
+static void play_profile_sound(UINT index);
+static void open_profiles_settings(HWND owner);
+static LRESULT CALLBACK profiles_settings_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp);
+static BOOL choose_profile_wav(HWND owner);
+static BOOL reset_profile_wav(HWND owner);
 
 #include "icon_bytes.h"
 
