@@ -94,3 +94,93 @@ jobs:
           name: LayoutBeep-RP2040-Zero
           path: firmware/.pio/build/waveshare_rp2040_zero/firmware.uf2
           if-no-files-found: error
+
+  release:
+    name: Публикация релиза
+    needs: [windows, firmware]
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Получить исходники
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Определить необходимость релиза
+        id: version
+        shell: bash
+        run: |
+          if [ ! -f VERSION ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Некорректный VERSION: $VERSION"
+            exit 1
+          fi
+
+          PUBLISH=false
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PUBLISH=true
+          else
+            BEFORE="${{ github.event.before }}"
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              PUBLISH=true
+            elif ! git diff --quiet "$BEFORE" "$GITHUB_SHA" -- VERSION; then
+              PUBLISH=true
+            fi
+          fi
+
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Скачать LayoutBeep.exe
+        if: steps.version.outputs.publish == 'true'
+        uses: actions/download-artifact@v5
+        with:
+          name: LayoutBeep-Windows-x64
+          path: release/windows
+
+      - name: Скачать firmware.uf2
+        if: steps.version.outputs.publish == 'true'
+        uses: actions/download-artifact@v5
+        with:
+          name: LayoutBeep-RP2040-Zero
+          path: release/firmware
+
+      - name: Подготовить файлы релиза
+        if: steps.version.outputs.publish == 'true'
+        shell: bash
+        run: |
+          cp release/windows/LayoutBeep.exe release/LayoutBeep.exe
+          cp release/firmware/firmware.uf2 release/LayoutBeep-RP2040-Zero.uf2
+          cd release
+          sha256sum LayoutBeep.exe LayoutBeep-RP2040-Zero.uf2 > SHA256SUMS.txt
+
+      - name: Опубликовать GitHub Release
+        if: steps.version.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          TAG="v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" \
+              release/LayoutBeep.exe \
+              release/LayoutBeep-RP2040-Zero.uf2 \
+              release/SHA256SUMS.txt \
+              --clobber
+          else
+            gh release create "$TAG" \
+              release/LayoutBeep.exe \
+              release/LayoutBeep-RP2040-Zero.uf2 \
+              release/SHA256SUMS.txt \
+              --target "$GITHUB_SHA" \
+              --title "LayoutBeep v${VERSION}" \
+              --generate-notes
+          fi
